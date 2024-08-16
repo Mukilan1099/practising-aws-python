@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: awss3bucketcreation
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Instance Configuration"
+        Parameters:
+          - Instanceparameters
+          - AMIid
+      - Label:
+          default: "S3 Bucket Configuration"
+        Parameters:
+          - S3Bucketname
+# logical id and the type is only needed conpulsory in parameters
+Parameters:
+  Instanceparameters:
+    Type: String
+    Default: t2.micro
+    Description: Enter the instance type you would like to use
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+
+  AMIid:
+    Type: String
+    Default: ami-0427090fd1714168b
+    Description: Enter the AMI id you would like to use
+    AllowedValues:
+      - ami-0427090fd1714168b
+      - ami-0c55b159cbfafe1f0
+
+  S3Bucketname:
+    Type: String
+    Default: mukils3bucket123
+    Description: Enter the S3 bucket name you would like to use
+
+# with the use of parameters and refering.
+
+Resources:
+  mukils3bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3Bucketname
+
+  mukilec2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AMIid
+      InstanceType: !Ref Instanceparameters

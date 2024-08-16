@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: aws resources vpc,ec2,s3,subnet all together with the use of parameters and metadata
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Instance Configuration"
+        Parameters:
+          - EC2InstanceType
+          - VpcId
+          - SubnetId
+          - Instanceparameters
+      - Label:
+          default: "S3 Bucket Configuration"
+        Parameters:
+          - S3Bucketname
+Parameters:
+  S3Bucketname:
+    Type: String
+    Default: mys3bucket1099
+    Description: Enter the S3 bucket name you would like to use
+
+  EC2InstanceType:
+    Type: String
+    Default: ami-0427090fd1714168b
+    Description: Enter the instance type you would like to use
+    AllowedValues:
+      - ami-0427090fd1714168b
+
+  Instanceparameters:
+    Type: String
+    Default: t2.micro
+    Description: Enter the instance type you would like to use
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+
+  VpcId:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: Enter the VPC id you would like to use
+    AllowedValues:
+      - 10.0.0.0/16
+      - 10.0.0.0/24
+
+  SubnetId:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: Enter the Subnet id you would like to use
+    AllowedValues:
+      - 10.0.1.0/24
+
+Resources:
+  myvpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcId
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: myVpc
+
+  mysubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref myvpc
+      CidrBlock: !Ref SubnetId
+
+  mys3:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3Bucketname
+      Tags:
+        - Key: Name
+          Value: mys3bucket1099
+
+  myec2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref EC2InstanceType
+      InstanceType: !Ref Instanceparameters
+      SubnetId: !Ref mysubnet
+      Tags:
+        - Key: Name
+          Value: myec2

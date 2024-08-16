@@ -1,0 +1,144 @@
+org: sreccv1
+app: eventsnssqslambda
+service: instancechangeeventlambda
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-1
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource:
+            Fn::GetAtt: [EC2StateChangeQueue, Arn]
+        - Effect: Allow
+          Action:
+            - sns:Publish
+          Resource:
+            Ref: EC2StateChangeTopic
+
+functions:
+  processEC2StateChange:
+    handler: handler.lambda_handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt: [EC2StateChangeQueue, Arn]
+    environment:
+      SNS_TOPIC_ARN:
+        Ref: EC2StateChangeTopic
+      SQS_QUEUE_URL:
+        Ref: EC2StateChangeQueue
+
+resources:
+  Resources:
+    EC2StateChangeTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ec2-state-change-topic
+
+    EC2StateChangeQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ec2-state-change-queue
+        VisibilityTimeout: 30
+
+    EC2StateChangeQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - Ref: EC2StateChangeQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal: "*"
+              Action: "sqs:SendMessage"
+              Resource:
+                Fn::GetAtt: [EC2StateChangeQueue, Arn]
+              Condition:
+                ArnEquals:
+                  aws:SourceArn:
+                    Ref: EC2StateChangeTopic
+
+    SNSQueueSubscription:
+      Type: AWS::SNS::Subscription
+      Properties:
+        TopicArn:
+          Ref: EC2StateChangeTopic
+        Protocol: sqs
+        Endpoint:
+          Fn::GetAtt: [EC2StateChangeQueue, Arn]
+        RawMessageDelivery: true
+
+    EventBridgeIAMRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: AllowEventBridgeToSNS
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - sns:Publish
+                  Resource:
+                    Ref: EC2StateChangeTopic
+
+    EventBridgeRule:
+      Type: AWS::Events::Rule
+      Properties:
+        EventPattern:
+          source:
+            - aws.ec2
+          detail-type:
+            - EC2 Instance State-change Notification
+        Targets:
+          - Arn:
+              Ref: EC2StateChangeTopic
+            Id: SendToSNS
+        State: ENABLED
+        RoleArn:
+          Fn::GetAtt:
+            - EventBridgeIAMRole
+            - Arn
+
+    SNSTopicPolicy:
+      Type: AWS::SNS::TopicPolicy
+      Properties:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: sns:Publish
+              Resource:
+                Ref: EC2StateChangeTopic
+        Topics:
+          - Ref: EC2StateChangeTopic
+
+  Outputs:
+    EC2StateChangeQueueURL:
+      Value:
+        Ref: EC2StateChangeQueue
+      Export:
+        Name: EC2StateChangeQueueURL
+
+    EC2StateChangeTopicARN:
+      Value:
+        Ref: EC2StateChangeTopic
+      Export:
+        Name: EC2StateChangeTopicARN

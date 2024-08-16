@@ -1,0 +1,209 @@
+# AWSTemplateFormatVersion: "2010-09-09"
+# Description: AWS resources for ASG, ALB, and CloudWatch with Apache and Nginx
+
+# Parameters:
+#   EC2InstanceAMIid:
+#     Type: String
+#     Default: ami-0427090fd1714168b
+#     Description: Enter the AMI ID you would like to use
+#     AllowedValues:
+#       - ami-0427090fd1714168b
+
+#   InstanceType:
+#     Type: String
+#     Default: t2.micro
+#     Description: Enter the instance type you would like to use
+#     AllowedValues:
+#       - t2.micro
+#       - t2.small
+#       - t2.medium
+
+# Resources:
+#   ApacheLaunchTemplate:
+#     Type: AWS::EC2::LaunchTemplate
+#     Properties:
+#       LaunchTemplateName: ApacheLaunchTemplate
+#       LaunchTemplateData:
+#         ImageId: !Ref EC2InstanceAMIid
+#         InstanceType: !Ref InstanceType
+#         UserData:
+#           Fn::Base64: !Sub |
+#             #!/bin/bash
+#             yum update -y
+#             yum install -y httpd
+#             systemctl start httpd
+#             systemctl enable httpd
+
+#   NginxLaunchTemplate:
+#     Type: AWS::EC2::LaunchTemplate
+#     Properties:
+#       LaunchTemplateName: NginxLaunchTemplate
+#       LaunchTemplateData:
+#         ImageId: !Ref EC2InstanceAMIid
+#         InstanceType: !Ref InstanceType
+#         UserData:
+#           Fn::Base64: !Sub |
+#             #!/bin/bash
+#             yum update -y
+#             amazon-linux-extras install -y nginx1
+#             systemctl start nginx
+#             systemctl enable nginx
+
+#   AutoScalingGroup:
+#     Type: AWS::AutoScaling::AutoScalingGroup
+#     Properties:
+#       AutoScalingGroupName: WebServerASG
+#       AvailabilityZones:
+#         - us-east-1a
+#         - us-east-1b
+#       MixedInstancesPolicy:
+#         InstancesDistribution:
+#           OnDemandAllocationStrategy: prioritized
+#           OnDemandBaseCapacity: 1
+#           OnDemandPercentageAboveBaseCapacity: 50
+#         LaunchTemplates:
+#           - LaunchTemplate:
+#               LaunchTemplateName: !Ref ApacheLaunchTemplate
+#             Version: !GetAtt ApacheLaunchTemplate.LatestVersionNumber
+#           - LaunchTemplate:
+#               LaunchTemplateName: !Ref NginxLaunchTemplate
+#             Version: !GetAtt NginxLaunchTemplate.LatestVersionNumber
+#       MinSize: 1
+#       MaxSize: 2
+#       DesiredCapacity: 2
+#       TargetGroupARNs:
+#         - !Ref TargetGroup
+#       VPCZoneIdentifier:
+#         - subnet-006acaf01f328e7ba
+#         - subnet-06b0612b82665bb76
+
+#   LoadBalancer:
+#     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+#     Properties:
+#       IpAddressType: ipv4
+#       Subnets:
+#         - subnet-006acaf01f328e7ba
+#         - subnet-06b0612b82665bb76
+#       Type: application
+
+#   Listener:
+#     Type: AWS::ElasticLoadBalancingV2::Listener
+#     Properties:
+#       DefaultActions:
+#         - TargetGroupArn: !Ref TargetGroup
+#           Type: forward
+#       LoadBalancerArn: !Ref LoadBalancer
+#       Port: 80
+#       Protocol: HTTP
+
+#   TargetGroup:
+#     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+#     Properties:
+#       Port: 80
+#       Protocol: HTTP
+#       VpcId: vpc-027a1bff58ddaa46d
+#       TargetType: instance
+AWSTemplateFormatVersion: "2010-09-09"
+Description: AWS resources for ASG, ALB, and CloudWatch with Apache and Nginx
+
+Parameters:
+  EC2InstanceAMIid:
+    Type: String
+    Default: ami-0427090fd1714168b
+    Description: Enter the AMI ID you would like to use
+    AllowedValues:
+      - ami-0427090fd1714168b
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: Enter the instance type you would like to use
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+
+Resources:
+  ApacheLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: ApacheLaunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref EC2InstanceAMIid
+        InstanceType: !Ref InstanceType
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            yum update -y
+            yum install -y httpd
+            systemctl start httpd
+            systemctl enable httpd
+
+  NginxLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: NginxLaunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref EC2InstanceAMIid
+        InstanceType: !Ref InstanceType
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            yum update -y
+            amazon-linux-extras install -y nginx1
+            systemctl start nginx
+            systemctl enable nginx
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: WebServerASG
+      AvailabilityZones:
+        - us-east-1a
+        - us-east-1b
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandAllocationStrategy: prioritized
+          OnDemandBaseCapacity: 1
+          OnDemandPercentageAboveBaseCapacity: 50
+        LaunchTemplate:
+          - LaunchTemplate:
+              LaunchTemplateName: !Ref ApacheLaunchTemplate
+            Version: !GetAtt ApacheLaunchTemplate.LatestVersionNumber
+          - LaunchTemplate:
+              LaunchTemplateName: !Ref NginxLaunchTemplate
+            Version: !GetAtt NginxLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 2
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier:
+        - subnet-006acaf01f328e7ba
+        - subnet-06b0612b82665bb76
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Subnets:
+        - subnet-006acaf01f328e7ba
+        - subnet-06b0612b82665bb76
+      Type: application
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: vpc-027a1bff58ddaa46d
+      TargetType: instance

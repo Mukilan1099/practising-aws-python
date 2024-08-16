@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: aws resources asg,alb,watch
+
+Parameters:
+  EC2InstanceAMIid:
+    Type: String
+    Default: ami-0427090fd1714168b
+    Description: Enter the instance type you would like to use
+    AllowedValues:
+      - ami-0427090fd1714168b
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: Enter the instance type you would like to use
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+
+  # VpcId:
+  #   Type: String
+  #   Default: 10.0.0.0/16
+  #   Description: Enter the VPC id you would like to use
+  #   AllowedValues:
+  #     - 10.0.0.0/16
+  #     - 10.0.0.0/24
+
+  # SubnetId:
+  #   Type: String
+  #   Default: 10.0.1.0/24
+  #   Description: Enter the Subnet id you would like to use
+  #   AllowedValues:
+  #     - 10.0.1.0/24
+Resources:
+  # myvpc:
+  #   Type: AWS::EC2::VPC
+  #   Properties:
+  #     CidrBlock: !Ref VpcId
+  #     EnableDnsSupport: true
+  #     EnableDnsHostnames: true
+  #     Tags:
+  #       - Key: Name
+  #         Value: myVpc
+
+  # mysubnet:
+  #   Type: AWS::EC2::Subnet
+  #   Properties:
+  #     VpcId: !Ref myvpc
+  #     CidrBlock: !Ref SubnetId
+
+  LaunchConfigName:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      LaunchConfigurationName: WebserverConfiguration
+      ImageId: !Ref EC2InstanceAMIid
+      InstanceType: !Ref InstanceType
+
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          enable httpd
+          echo "<html><body><h1>Hello Mukilan</h1><p>IP Address: $(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)</p></body></html>" > /var/www/html/index.html
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: WebServerASG
+      AvailabilityZones:
+        - us-east-1a
+        - us-east-1b
+      LaunchConfigurationName: !Ref LaunchConfigName
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 2
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier:
+        - subnet-006acaf01f328e7ba
+        - subnet-06b0612b82665bb76
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Subnets:
+        - subnet-006acaf01f328e7ba
+        - subnet-06b0612b82665bb76
+
+      Type: application
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      VpcId: vpc-027a1bff58ddaa46d
+      TargetType: instance
+
+  Cloudwatchlogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/autoscaling/webserver
+      RetentionInDays: 1
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Alerts
+
+  SNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      TopicArn: !Ref SNSTopic
+      Endpoint: bmukilan999@gmail.com
