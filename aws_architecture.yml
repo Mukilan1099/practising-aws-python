@@ -1,0 +1,328 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: aws architecture with vpc,subnets:private,public,ALB,S3,IGW,NAT.
+Resources:
+  MyVPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: MyVPC
+
+  MyInternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: MyInternetGateway
+
+  MyInternetGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      VpcId: !Ref MyVPC
+      InternetGatewayId: !Ref MyInternetGateway
+
+  MyPublicSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: MyPublicSubnet1
+
+  MyPublicSubnet2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: us-east-1d
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: MyPublicSubnet2
+
+  MyPrivateSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: MyPrivateSubnet1
+
+  MyPrivateSubnet2:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId: !Ref MyVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: us-east-1d
+      Tags:
+        - Key: Name
+          Value: MyPrivateSubnet2
+
+  MyPublicRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: MyPublicRouteTable
+
+  MyPublicRoute:
+    Type: "AWS::EC2::Route"
+    DependsOn: MyInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref MyPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MyInternetGateway
+
+  MyPublicSubnetRouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref MyPublicSubnet1
+      RouteTableId: !Ref MyPublicRouteTable
+
+  NATGateway:
+    Type: "AWS::EC2::NatGateway"
+    Properties:
+      AllocationId: !GetAtt MyEIP.AllocationId
+      SubnetId: !Ref MyPublicSubnet1
+
+  MyEIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: vpc
+
+  MyPrivateRouteTable1:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: MyPrivateRouteTable1
+
+  MyPrivateRouteTable2:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref MyVPC
+      Tags:
+        - Key: Name
+          Value: MyPrivateRouteTable2
+  MyPrivateRoute1:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref MyPrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  MyPrivateRoute2:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref MyPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  MyPrivateSubnet1RouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref MyPrivateSubnet1
+      RouteTableId: !Ref MyPrivateRouteTable1
+
+  MyPrivateSubnet2RouteTableAssociation:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref MyPrivateSubnet2
+      RouteTableId: !Ref MyPrivateRouteTable2
+
+  MyALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: MyALB
+      Scheme: internet-facing
+      SubnetMappings:
+        - SubnetId: !Ref MyPublicSubnet1
+        - SubnetId: !Ref MyPublicSubnet2
+
+      Tags:
+        - Key: Name
+          Value: MyALB
+
+  MyALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MyALBTargetGroup
+      LoadBalancerArn: !Ref MyALB
+      Port: 80
+      Protocol: HTTP
+
+  MyALBsecuritygroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable HTTP access via port 80
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "80"
+          ToPort: "80"
+          CidrIp: 0.0.0.0/0
+
+  EC2instancesecuritygroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable HTTP access via port 80
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "80"
+          ToPort: "80"
+          SourceSecurityGroupId: !Ref MyALBsecuritygroup
+
+  BastionHostinstancesecuritygroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: Enable SSH access via port 22
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: 0.0.0.0/0
+
+  MyALBTargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref MyVPC
+      Targets:
+        - Id: !Ref EC2Instance1
+          Port: 80
+        - Id: !Ref EC2Instance2
+          Port: 80
+
+  # Mykeypair:
+  #   Type: AWS::EC2::KeyPair
+  #   Properties:
+  #     KeyName: mykeypair
+
+  # Mykeypair1:
+  #   Type: AWS::EC2::KeyPair
+  #   Properties:
+  #     KeyName: mykeypair1
+
+  EC2Instance1:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0ae8f15ae66fe8cda
+      SubnetId: !Ref MyPrivateSubnet1
+      KeyName: mykeypairprivate
+      Tags:
+        - Key: Name
+          Value: EC2Instance1
+      SecurityGroupIds:
+        - !Ref EC2instancesecuritygroup
+
+  EC2Instance2:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0ae8f15ae66fe8cda
+      SubnetId: !Ref MyPrivateSubnet2
+      KeyName: mykeypairprivate
+      Tags:
+        - Key: Name
+          Value: EC2Instance2
+      SecurityGroupIds:
+        - !Ref EC2instancesecuritygroup
+
+  BastionHostInstance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0ae8f15ae66fe8cda
+      SubnetId: !Ref MyPublicSubnet1
+      # KeyName: !Ref Mykeypair
+      Tags:
+        - Key: Name
+          Value: BastionHostInstance
+      SecurityGroupIds:
+        - !Ref BastionHostinstancesecuritygroup
+      IamInstanceProfile: !Ref myiaminstanceprofile
+
+  mys3bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: mybucketmontypractisecfn
+      AccessControl: Private
+      Tags:
+        - Key: Name
+          Value: mys3bucket
+
+  myvpcendpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      RouteTableIds:
+        - !Ref MyPrivateRouteTable1
+        - !Ref MyPrivateRouteTable2
+      VpcId: !Ref MyVPC
+
+  mys3bucketpolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref mys3bucket
+      PolicyDocument:
+        Statement:
+          - Action: "s3:*"
+            Effect: "Allow"
+            Resource: !Sub "arn:aws:s3:::${mys3bucket}/*"
+            Principal: "*"
+            Condition:
+              StringEquals:
+                "aws:sourceVpce": !Ref myvpcendpoint
+
+    #iam policy for bastionhost instance such that it gets access for all bucket except this bucket
+  myiamrole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "ec2.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "S3AccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "s3:*"
+                Resource: "*"
+              - Effect: "Deny"
+                Action: "s3:*"
+                Resource:
+                  - !Sub "arn:aws:s3:::${mys3bucket}"
+                  - !Sub "arn:aws:s3:::${mys3bucket}/*"
+
+  myiaminstanceprofile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Roles:
+        - !Ref myiamrole
